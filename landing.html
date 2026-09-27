@@ -50,6 +50,15 @@
         background: linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.8));
         }
 
+        .search-feedback {
+            font-size: .75rem;
+            margin-top: .25rem;
+            min-height: 1rem;
+        }
+
+        #searchInput.is-invalid { border-color: #dc3545; }
+        #searchInput.is-valid   { border-color: #198754; }
+
     </style>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -60,7 +69,7 @@
   <body>
     <nav class="navbar navbar-expand-lg bg-body-tertiary">
         <div class="container-fluid">
-            <a class="navbar-brand" href="#"><i class="bi bi-play"></i>Cinematix</a>
+            <a class="navbar-brand" href="landing.html"><i class="bi bi-play"></i>Cinematix</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
             </button>
@@ -72,21 +81,22 @@
                 <li class="nav-item">
                 <a class="nav-link" href="#"><i class="bi bi-link"></i>Link</a>
                 </li>
-                <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    Account
-                </a>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#">Profile</a></li>
-                    <li><a class="dropdown-item" href="#">Settings</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="#">Logout</a></li>
-                </ul>
-                </li>
+                <li class="nav-item" id="navAuthArea"></li>
             </ul>
-            <form class="d-flex" role="search">
-                <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search"/>
-                <button class="btn btn-outline-success" type="submit">Search</button>
+            <form class="d-flex flex-column flex-sm-row position-relative" id="searchForm" role="search" novalidate>
+                <div class="me-sm-2 flex-grow-1">
+                    <input class="form-control" type="search" id="searchInput"
+                           placeholder="Search movies, series…"
+                           aria-label="Search"
+                           autocomplete="off"
+                           minlength="2"
+                           maxlength="60"
+                           required>
+                    <div class="search-feedback" id="searchFeedback"></div>
+                </div>
+                <div>
+                    <button class="btn btn-outline-success w-100" type="submit" id="searchBtn">Search</button>
+                </div>
             </form>
             </div>
         </div>
@@ -195,7 +205,6 @@
 
   <br><br>
 
-  <!-- ORIGINAL SERIES -->
   <div class="container" id="shows">
     <h2>Upcoming Movies</h2>
     <br>
@@ -296,6 +305,179 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+
+    <script>
+    (function () {
+      'use strict';
+
+      const SESSION_KEY    = 'cinematix_session';
+      const USERS_KEY      = 'cinematix_users';
+      const SESSION_MAX_MS = 60 * 60 * 1000;
+
+      const navAuth      = document.getElementById('navAuthArea');
+      const searchForm   = document.getElementById('searchForm');
+      const searchInput  = document.getElementById('searchInput');
+      const searchBtn    = document.getElementById('searchBtn');
+      const searchFeed   = document.getElementById('searchFeedback');
+
+      const SEARCH_RE = /^[A-Za-z0-9À-ÿ .,'&:!?()-]+$/;
+
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      function getRawSession() {
+        try { return JSON.parse(localStorage.getItem(SESSION_KEY)); }
+        catch (e) { return null; }
+      }
+
+      function clearSession() {
+        localStorage.removeItem(SESSION_KEY);
+      }
+
+      function isValidSession(s) {
+        if (!s || typeof s !== 'object') return false;
+        if (typeof s.email    !== 'string' || s.email.trim() === '') return false;
+        if (typeof s.fullName !== 'string' || s.fullName.trim() === '') return false;
+        if (typeof s.loginAt  !== 'number' || !isFinite(s.loginAt)) return false;
+        if (s.loginAt > Date.now() + 60 * 1000) return false;
+        if (Date.now() - s.loginAt > SESSION_MAX_MS) return false;
+
+        const users = getUsers();
+        const match = users.find(function (u) {
+          return u.email.toLowerCase() === s.email.toLowerCase();
+        });
+        return !!match;
+      }
+
+      function getUsers() {
+        let users = [];
+        try { users = JSON.parse(localStorage.getItem(USERS_KEY)) || []; } catch (e) { users = []; }
+        return Array.isArray(users) ? users : [];
+      }
+
+      function getSession() {
+        const raw = getRawSession();
+        if (!raw) return null;
+        if (!isValidSession(raw)) { clearSession(); return null; }
+        return raw;
+      }
+
+      function render() {
+        const session = getSession();
+
+        if (session) {
+          navAuth.className = 'nav-item dropdown';
+          navAuth.innerHTML =
+            '<a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">' +
+              '<i class="bi bi-person-circle"></i> ' + escapeHtml(session.fullName) +
+            '</a>' +
+            '<ul class="dropdown-menu dropdown-menu-end">' +
+              '<li><h6 class="dropdown-header">Signed in as<br>' + escapeHtml(session.email) + '</h6></li>' +
+              '<li><hr class="dropdown-divider"></li>' +
+              '<li><a class="dropdown-item" href="#"><i class="bi bi-person"></i> Profile</a></li>' +
+              '<li><a class="dropdown-item" href="#"><i class="bi bi-gear"></i> Settings</a></li>' +
+              '<li><hr class="dropdown-divider"></li>' +
+              '<li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right"></i> Logout</a></li>' +
+            '</ul>';
+
+          document.getElementById('logoutBtn').addEventListener('click', function (e) {
+            e.preventDefault();
+            if (window.confirm('Are you sure you want to log out?')) {
+              clearSession();
+              window.location.href = 'landing.html';
+            }
+          });
+        } else {
+          navAuth.className = 'nav-item';
+          navAuth.innerHTML =
+            '<a class="nav-link" href="login.html"><i class="bi bi-box-arrow-in-right"></i>Login</a>';
+        }
+      }
+
+      function setSearchFeedback(msg, ok) {
+        searchFeed.textContent = msg || '';
+        searchFeed.className = 'search-feedback ' + (ok ? 'text-success' : 'text-danger');
+      }
+
+      function validateSearch(silent) {
+        const v = searchInput.value.trim();
+        let msg = '';
+        let valid = true;
+
+        if (v.length === 0) {
+          valid = false;
+          msg = 'Search cannot be empty.';
+        } else if (v.length < 2) {
+          valid = false;
+          msg = 'Enter at least 2 characters.';
+        } else if (v.length > 60) {
+          valid = false;
+          msg = 'Search is too long (max 60 characters).';
+        } else if (!SEARCH_RE.test(v)) {
+          valid = false;
+          msg = 'Only letters, numbers, spaces, and basic punctuation are allowed.';
+        } else if (/^\s+$/.test(v)) {
+          valid = false;
+          msg = 'Search cannot contain only spaces.';
+        } else if (/(.)\1{4,}/.test(v)) {
+          valid = false;
+          msg = 'Too many repeated characters.';
+        }
+
+        searchInput.classList.toggle('is-invalid', !valid);
+        searchInput.classList.toggle('is-valid',   valid && v.length > 0);
+
+        if (!silent) setSearchFeedback(valid ? 'Looks good!' : msg, valid);
+        return valid;
+      }
+
+      searchInput.addEventListener('input', function () {
+        searchInput.setCustomValidity('');
+        if (searchInput.value.length === 0) {
+          searchInput.classList.remove('is-invalid', 'is-valid');
+          setSearchFeedback('', true);
+        } else {
+          validateSearch(true);
+        }
+      });
+
+      searchInput.addEventListener('blur', function () {
+        if (searchInput.value.trim() !== '') validateSearch(false);
+      });
+
+      searchForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!validateSearch(false)) {
+          searchInput.focus();
+          return;
+        }
+
+        const query = searchInput.value.trim();
+
+        searchBtn.disabled = true;
+        const original = searchBtn.textContent;
+        searchBtn.textContent = 'Searching…';
+
+        setTimeout(function () {
+          searchBtn.disabled = false;
+          searchBtn.textContent = original;
+          setSearchFeedback('No results yet — search is a demo.', true);
+          console.log('Search query:', query);
+        }, 700);
+      });
+
+      render();
+
+      window.addEventListener('storage', function (e) {
+        if (e.key === SESSION_KEY) render();
+      });
+    })();
+    </script>
   </body>
 
     <footer class="border-top py-4">
