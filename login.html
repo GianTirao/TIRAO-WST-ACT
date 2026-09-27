@@ -101,6 +101,7 @@
       const LOCK_KEY      = 'cinematix_lockout';
       const USERS_KEY     = 'cinematix_users';
       const FLASH_KEY     = 'cinematix_flash';
+      const SESSION_KEY   = 'cinematix_session';
 
       const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -246,9 +247,20 @@
         if (user && user.password === password) {
           setLock({ attempts: 0, lockedUntil: 0 });
           clearAlert();
-          showAlert('success', 'Login successful! Welcome back, ' + user.fullName + '.');
+
+          localStorage.setItem(SESSION_KEY, JSON.stringify({
+            email:    user.email,
+            fullName: user.fullName,
+            loginAt:  Date.now()
+          }));
+
+          showAlert('success', 'Login successful! Welcome back, ' + user.fullName + '. Redirecting…');
           setFormDisabled(true);
           submitBtn.textContent = 'Logged in';
+
+          setTimeout(function () {
+            window.location.href = 'landing.html';
+          }, 900);
           return;
         }
 
